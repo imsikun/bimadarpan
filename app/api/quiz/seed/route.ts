@@ -1,0 +1,163 @@
+import { supabaseAdmin } from '@/lib/supabase';
+
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('Seed route must not run in production');
+}
+
+const PLACEHOLDER_QUESTIONS = [
+  {
+    question: 'Your employer provides a group health insurance policy of ₹3 lakh. You resign. What happens to your coverage?',
+    scenario_context: 'You have been at the company for 4 years. You resign on March 31.',
+    option_a: 'Coverage continues for 30 days after resignation at no cost',
+    option_b: 'Coverage ends immediately on your last working day',
+    option_c: 'You can convert it to an individual policy within 90 days',
+    option_d: 'Coverage continues until the policy renewal date',
+    correct_option: 'b',
+    explanation: 'Group health insurance is tied to employment. The moment you resign, coverage ends. There is no mandatory portability window — that only applies to individual policies. You must buy a new policy or port from a personal policy.',
+    shock_stat: '67% of salaried Indians have no health cover outside employer-provided group policies.',
+    difficulty: 'medium',
+    category: 'products',
+    archetype: 'trap',
+  },
+  {
+    question: 'A term insurance policy offers ₹1 crore cover for ₹12,000/year. What is the actual chance an Indian male aged 35 will claim it before 65?',
+    scenario_context: null,
+    option_a: 'About 25% — one in four die before 65',
+    option_b: 'About 50% — half of all men die before 65',
+    option_c: 'About 8% — roughly one in twelve',
+    option_d: 'Less than 1% — very unlikely',
+    correct_option: 'c',
+    explanation: 'LIC mortality tables show approximately 8% probability of death between ages 35–65 for Indian males. The insurer prices this in. The low premium reflects real risk — not a discount. Most people buy too little coverage believing the odds are higher.',
+    shock_stat: 'Average Indian term cover is ₹12 lakh — 8× below the recommended 10× annual income benchmark.',
+    difficulty: 'hard',
+    category: 'reality-check',
+    archetype: 'real-number',
+  },
+  {
+    question: 'An agent tells you: "Our ULIP gives 12–15% returns AND life cover — better than mutual funds and term together." What is wrong with this claim?',
+    scenario_context: 'The agent shows you a brochure with illustrated returns of 12% p.a.',
+    option_a: 'Nothing — ULIPs are SEBI regulated so returns are guaranteed',
+    option_b: 'Illustrated returns are projections, not guarantees; ULIP charges reduce net returns significantly in early years',
+    option_c: 'ULIPs cannot legally show projected returns above 8%',
+    option_d: 'The life cover in ULIPs is identical to term insurance',
+    correct_option: 'b',
+    explanation: 'IRDAI mandates that illustrated rates of 4% and 8% must be shown — not 12–15%. High early charges (premium allocation, fund management) mean net returns often lag pure mutual funds in the first 5–7 years. The life cover is also thin compared to a standalone term policy.',
+    shock_stat: 'ULIP surrender charges can consume 15–70% of first-year premiums if exited before 5 years.',
+    difficulty: 'medium',
+    category: 'mis-selling',
+    archetype: 'agent-script',
+  },
+  {
+    question: 'You were diagnosed with diabetes 2 years ago. Today you buy a health insurance policy. When can you claim for diabetes-related hospitalisation?',
+    scenario_context: null,
+    option_a: 'Immediately — diagnosis was before the policy, so it is not a claim',
+    option_b: 'After 30 days (standard waiting period)',
+    option_c: 'After 2–4 years — most policies exclude pre-existing diseases for that long',
+    option_d: 'Never — pre-existing conditions are permanently excluded',
+    correct_option: 'c',
+    explanation: 'Pre-existing disease (PED) waiting periods in India typically range from 2 to 4 years depending on the insurer and plan. During this period, any claim linked to a disclosed PED will be rejected. After the waiting period expires, coverage applies.',
+    shock_stat: 'In 2022–23, 30% of claim rejections cited non-disclosure of pre-existing conditions.',
+    difficulty: 'easy',
+    category: 'claims',
+    archetype: 'fine-print',
+  },
+  {
+    question: 'You are a daily wage worker with a monthly income of ₹8,000. Are you eligible for Ayushman Bharat – PM-JAY health coverage?',
+    scenario_context: 'You have no health insurance and have never applied for any government scheme.',
+    option_a: 'No — PM-JAY only covers BPL card holders',
+    option_b: 'Yes — if your family is in the SECC 2011 database or state-identified list',
+    option_c: 'Yes — any Indian with income below ₹10,000/month qualifies',
+    option_d: 'No — PM-JAY is only for people with Jan Dhan accounts',
+    correct_option: 'b',
+    explanation: 'PM-JAY covers families identified in the Socio-Economic Caste Census 2011 database or state government beneficiary lists — not income alone. Eligible families get ₹5 lakh annual cover at empanelled hospitals. Check eligibility at pmjay.gov.in using your mobile number.',
+    shock_stat: 'Only 42% of eligible PM-JAY beneficiaries have ever used the scheme due to awareness gaps.',
+    difficulty: 'medium',
+    category: 'regulations',
+    archetype: 'govt-scheme',
+  },
+  {
+    question: 'You invest ₹1 lakh/year in an endowment policy for 20 years. The agent says you will get ₹40 lakh at maturity. What is your actual annualised return (XIRR)?',
+    scenario_context: 'Total premiums paid: ₹20 lakh over 20 years. Maturity value: ₹40 lakh.',
+    option_a: 'About 10% — your money doubled so the return is high',
+    option_b: 'About 4.5–5.5% — well below inflation',
+    option_c: 'About 7–8% — roughly equivalent to PPF',
+    option_d: 'About 12% — better than most mutual funds',
+    correct_option: 'b',
+    explanation: 'Doubling over 20 years sounds impressive, but the XIRR on ₹1 lakh/year for 20 years yielding ₹40 lakh is approximately 5.1%. The 10-year average inflation in India is ~5.5%. You are likely earning a negative real return while also getting inadequate life cover.',
+    shock_stat: 'Endowment policies returned an average 4.2% XIRR vs 12.5% for Nifty 50 index over the same 20-year period.',
+    difficulty: 'hard',
+    category: 'products',
+    archetype: 'calculation',
+  },
+  {
+    question: 'A health insurance policy says "cashless treatment at network hospitals." You go to a network hospital. Can the insurer deny the cashless claim?',
+    scenario_context: 'The hospital is listed on the insurer\'s website. You have a valid policy with no outstanding premium.',
+    option_a: 'No — cashless means guaranteed approval at network hospitals',
+    option_b: 'Yes — insurers can deny cashless and ask you to claim reimbursement later',
+    option_c: 'Only if you did not pre-authorise the admission 48 hours in advance',
+    option_d: 'No — IRDAI prohibits denial of cashless at listed network hospitals',
+    correct_option: 'b',
+    explanation: 'Cashless is a convenience facility, not a guarantee. Insurers can decline cashless and direct you to pay upfront and claim reimbursement if they need more time to verify the claim. Network listing does not override their right to investigate suspected fraud or policy violations.',
+    shock_stat: '1 in 5 cashless claims is initially denied or deferred, forcing patients to arrange emergency funds.',
+    difficulty: 'medium',
+    category: 'claims',
+    archetype: 'trap',
+  },
+  {
+    question: 'India\'s overall insurance penetration (premium as % of GDP) in 2023 was approximately:',
+    scenario_context: null,
+    option_a: '9% — among the highest in Asia',
+    option_b: '3.8% — below the global average of 7%',
+    option_c: '6.5% — close to the global average',
+    option_d: '1.2% — among the lowest in the world',
+    correct_option: 'b',
+    explanation: 'India\'s insurance penetration was 3.76% of GDP in 2022–23, well below the global average of ~7%. Life insurance accounts for ~3% and non-life for ~1%. Despite being the 5th largest economy, India\'s protection gap remains massive.',
+    shock_stat: '40 crore Indians are estimated to have zero insurance of any kind.',
+    difficulty: 'medium',
+    category: 'reality-check',
+    archetype: 'real-number',
+  },
+  {
+    question: 'An agent says: "Don\'t worry about the nominee — the claim money automatically goes to your legal heirs even without a will." Is this correct?',
+    scenario_context: 'You are buying a term policy. The agent discourages you from worrying about the nomination.',
+    option_a: 'Yes — nominees and legal heirs are the same thing in insurance',
+    option_b: 'No — a nominee is only a trustee; legal heirs must still establish claim via succession certificate if there is a dispute',
+    option_c: 'Yes — IRDAI mandates that nominees get final ownership of claim proceeds',
+    option_d: 'No — without a nominee, the claim is forfeited to the government',
+    correct_option: 'b',
+    explanation: 'A nominee in insurance is a trustee who receives the money on behalf of the estate. If legal heirs dispute the nomination, courts can override it. The Insurance Amendment Act 2015 gave nominees of life policies beneficial ownership, but for general insurance and complex family situations, it still requires legal adjudication.',
+    shock_stat: 'Nomination disputes delay settlement in over 8% of life insurance claims every year.',
+    difficulty: 'hard',
+    category: 'mis-selling',
+    archetype: 'agent-script',
+  },
+  {
+    question: 'Your health policy has a "room rent sub-limit" of 1% of sum insured per day. Your SI is ₹5 lakh. You stay in a ₹6,000/day room for 5 days. How much does the insurer deduct?',
+    scenario_context: 'Total hospital bill: ₹1,20,000 (room: ₹30,000, procedures: ₹90,000).',
+    option_a: 'Nothing — room rent limits only apply to the room charges',
+    option_b: '₹5,000 — just the excess room rent (₹1,000/day × 5 days)',
+    option_c: 'Proportionally more — the insurer scales down all related charges, not just room rent',
+    option_d: '₹30,000 — the full room rent is excluded',
+    correct_option: 'c',
+    explanation: 'Room rent sub-limits trigger proportional deductions on all associated charges. If your limit is ₹5,000/day but you chose ₹6,000/day (83% of limit), the insurer pays only 83% of related charges like doctor fees, nursing, and procedures — not just the excess room cost.',
+    shock_stat: 'Room rent sub-limits cause the average insured to receive 20–35% less than their actual bill.',
+    difficulty: 'hard',
+    category: 'claims',
+    archetype: 'fine-print',
+  },
+] as const;
+
+export async function POST() {
+  const { error } = await supabaseAdmin
+    .from('quiz_questions')
+    .upsert(
+      PLACEHOLDER_QUESTIONS.map((q, i) => ({ id: i + 1, ...q })),
+      { onConflict: 'id' },
+    );
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ seeded: PLACEHOLDER_QUESTIONS.length });
+}

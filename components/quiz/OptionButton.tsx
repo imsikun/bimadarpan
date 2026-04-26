@@ -1,102 +1,105 @@
 'use client';
 
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';
 
-export type OptionState = 'idle' | 'selected' | 'correct' | 'wrong';
+export type OptionState = 'idle' | 'selected' | 'correct' | 'wrong' | 'revealed' | 'dimmed';
 
 interface OptionButtonProps {
+  letter: 'A' | 'B' | 'C' | 'D';
   text: string;
   state: OptionState;
   onClick: () => void;
-  disabled?: boolean;
 }
 
-const STATE_STYLES: Record<OptionState, { background: string; borderColor: string }> = {
-  idle:     { background: 'var(--bg-data)',    borderColor: 'var(--border-subtle)' },
-  selected: { background: 'var(--saffron-dim)', borderColor: 'var(--saffron)' },
-  correct:  { background: 'var(--bg-data)',    borderColor: 'var(--teal)' },
-  wrong:    { background: 'var(--bg-data)',    borderColor: 'var(--red-alert)' },
-};
+interface CardStyle {
+  background: string;
+  border: string;
+  opacity?: number;
+}
 
-export default function OptionButton({ text, state, onClick, disabled }: OptionButtonProps) {
-  const s = STATE_STYLES[state];
-  const isAnswered = state === 'correct' || state === 'wrong';
+interface BadgeStyle {
+  background: string;
+  color: string;
+}
+
+function getCardStyle(state: OptionState): CardStyle {
+  switch (state) {
+    case 'correct':  return { background: 'rgba(0,212,170,0.06)',  border: '1px solid #00D4AA' };
+    case 'wrong':    return { background: 'rgba(255,71,87,0.06)',   border: '1px solid #FF4757' };
+    case 'revealed': return { background: 'rgba(0,212,170,0.04)',  border: '1px solid #00D4AA' };
+    case 'dimmed':   return { background: '#111128', border: '1px solid rgba(255,255,255,0.08)', opacity: 0.45 };
+    case 'selected': return { background: 'rgba(255,153,51,0.04)', border: '1px solid rgba(255,153,51,0.25)' };
+    default:         return { background: '#111128', border: '1px solid rgba(255,255,255,0.08)' };
+  }
+}
+
+function getBadgeStyle(state: OptionState): BadgeStyle {
+  switch (state) {
+    case 'correct':  return { background: '#00D4AA', color: '#000' };
+    case 'wrong':    return { background: '#FF4757', color: '#fff' };
+    case 'selected': return { background: 'rgba(255,153,51,0.15)', color: '#FF9933' };
+    default:         return { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.40)' };
+  }
+}
+
+export default function OptionButton({ letter, text, state, onClick }: OptionButtonProps) {
+  const card = getCardStyle(state);
+  const badge = getBadgeStyle(state);
+  const interactive = state === 'idle';
 
   return (
     <button
-      onClick={onClick}
-      disabled={disabled || isAnswered}
+      onClick={interactive ? onClick : undefined}
       style={{
         width: '100%',
         textAlign: 'left',
-        padding: 'var(--space-5)',
-        background: s.background,
-        border: `1px solid ${s.borderColor}`,
-        borderRadius: 'var(--radius-lg)',
-        transition: 'border-color var(--dur-fast) var(--ease-default), background var(--dur-fast)',
-        cursor: disabled || isAnswered ? 'default' : 'pointer',
-        position: 'relative',
-        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px 16px',
+        borderRadius: 10,
+        cursor: interactive ? 'pointer' : 'default',
+        pointerEvents: interactive ? 'auto' : 'none',
+        transition: 'border-color 200ms ease, background 200ms ease',
+        ...card,
       }}
     >
-      {/* Left accent bar — correct only */}
-      {state === 'correct' && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: 0, top: 0, bottom: 0,
-            width: 3,
-            background: 'var(--teal)',
-          }}
-        />
-      )}
-
+      {/* Letter badge */}
       <div
         style={{
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          paddingLeft: state === 'correct' ? 'var(--space-3)' : 0,
+          justifyContent: 'center',
+          flexShrink: 0,
+          fontFamily: 'var(--font-body)',
+          fontSize: 11,
+          fontWeight: 600,
+          transition: 'background 200ms ease, color 200ms ease',
+          ...badge,
         }}
       >
-        <span
-          style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-base)',
-            fontWeight: state === 'selected' ? 600 : 500,
-            color: 'var(--text-primary)',
-            lineHeight: 1.4,
-          }}
-        >
-          {text}
-        </span>
-
-        {/* Right indicator */}
-        {state === 'idle' && (
-          <div
-            style={{
-              width: 20, height: 20, flexShrink: 0,
-              borderRadius: '50%',
-              border: '1px solid var(--border-strong)',
-            }}
-          />
-        )}
-        {state === 'selected' && (
-          <div
-            style={{
-              width: 20, height: 20, flexShrink: 0,
-              borderRadius: '50%',
-              border: '2px solid var(--saffron)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--saffron)' }} />
-          </div>
-        )}
-        {state === 'correct' && <CheckCircle2 size={20} strokeWidth={1.5} color="var(--teal)" />}
-        {state === 'wrong'   && <XCircle      size={20} strokeWidth={1.5} color="var(--red-alert)" />}
+        {letter}
       </div>
+
+      {/* Option text */}
+      <span
+        style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 14,
+          fontWeight: 400,
+          color: 'var(--text-primary)',
+          lineHeight: 1.5,
+          flex: 1,
+        }}
+      >
+        {text}
+      </span>
+
+      {state === 'correct' && <CheckCircle size={16} strokeWidth={1.5} color="#00D4AA" style={{ flexShrink: 0 }} />}
+      {state === 'wrong'   && <XCircle     size={16} strokeWidth={1.5} color="#FF4757" style={{ flexShrink: 0 }} />}
     </button>
   );
 }

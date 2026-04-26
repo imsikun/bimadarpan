@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Info } from 'lucide-react';
+import { BarChart2 } from 'lucide-react';
 import OptionButton, { OptionState } from './OptionButton';
 import { QuizQuestionClient } from '@/types';
 
@@ -23,16 +23,22 @@ interface QuizCardProps {
 }
 
 const OPTION_KEYS = ['a', 'b', 'c', 'd'] as const;
+const LETTER_MAP: Record<'a' | 'b' | 'c' | 'd', 'A' | 'B' | 'C' | 'D'> = { a: 'A', b: 'B', c: 'C', d: 'D' };
 
 function resolveOptionState(
   key: 'a' | 'b' | 'c' | 'd',
   selected: 'a' | 'b' | 'c' | 'd' | null,
   result: AnswerResult | null,
 ): OptionState {
-  if (!result) return selected === key ? 'selected' : 'idle';
-  if (key === result.correct_option) return 'correct';
+  if (!result) {
+    if (selected === key) return 'selected';
+    if (selected !== null) return 'dimmed';
+    return 'idle';
+  }
+  if (key === result.correct_option && key === selected) return 'correct';
   if (key === selected) return 'wrong';
-  return 'idle';
+  if (key === result.correct_option) return 'revealed';
+  return 'dimmed';
 }
 
 export default function QuizCard({
@@ -41,12 +47,9 @@ export default function QuizCard({
   total,
   selectedOption,
   result,
-  isSubmitting,
   onSelectOption,
   onNext,
 }: QuizCardProps) {
-  const progressPct = ((currentIndex + 1) / total) * 100;
-
   const optionText: Record<'a' | 'b' | 'c' | 'd', string> = {
     a: question.option_a,
     b: question.option_b,
@@ -56,171 +59,171 @@ export default function QuizCard({
 
   return (
     <div style={{ width: '100%' }}>
-      {/* ── Progress & header ───────────────────────────────────── */}
-      <div style={{ marginBottom: 'var(--space-12)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 'var(--space-4)' }}>
-          {question.scenario_context && (
-            <span
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: 'var(--text-sm)',
-                fontStyle: 'italic',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              Scenario: {question.scenario_context}
-            </span>
-          )}
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-muted)',
-              marginLeft: 'auto',
-              flexShrink: 0,
-            }}
-          >
-            {String(currentIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
-          </span>
-        </div>
-
-        {/* Progress bar */}
-        <div
-          style={{
-            height: 6,
-            width: '100%',
-            background: 'rgba(255,255,255,0.08)',
-            borderRadius: 'var(--radius-full)',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${progressPct}%`,
-              background: 'var(--saffron)',
-              borderRadius: 'var(--radius-full)',
-              boxShadow: '0 0 8px rgba(255,153,51,0.5)',
-              transition: 'width var(--dur-slow) var(--ease-smooth)',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* ── Question ────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 'var(--space-10)' }}>
-        <h1
+      {/* Question header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+        }}
+      >
+        <span
           style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-md)',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            lineHeight: 1.45,
+            fontSize: 11,
+            fontWeight: 400,
+            color: 'var(--text-tertiary)',
           }}
         >
-          {question.question}
-        </h1>
+          Question
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            color: 'var(--text-tertiary)',
+          }}
+        >
+          {String(currentIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+        </span>
       </div>
 
-      {/* ── Options ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {/* Scenario context */}
+      {question.scenario_context && (
+        <div
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            borderLeft: '2px solid rgba(255,255,255,0.12)',
+            borderRadius: '0 6px 6px 0',
+            padding: '10px 14px',
+            marginBottom: 16,
+          }}
+        >
+          <p
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              fontWeight: 400,
+              fontStyle: 'italic',
+              color: 'var(--text-tertiary)',
+              lineHeight: 1.6,
+              margin: 0,
+            }}
+          >
+            {question.scenario_context}
+          </p>
+        </div>
+      )}
+
+      {/* Question text */}
+      <p
+        style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 18,
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          lineHeight: 1.5,
+          margin: '0 0 20px',
+        }}
+      >
+        {question.question}
+      </p>
+
+      {/* Options */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {OPTION_KEYS.map((key) => (
           <OptionButton
             key={key}
+            letter={LETTER_MAP[key]}
             text={optionText[key]}
             state={resolveOptionState(key, selectedOption, result)}
             onClick={() => onSelectOption(key)}
-            disabled={!!selectedOption || isSubmitting}
           />
         ))}
       </div>
 
-      {/* ── Explanation card ────────────────────────────────────── */}
+      {/* Explanation card */}
       {result && (
         <div
           style={{
-            marginTop: 'var(--space-8)',
-            padding: 'var(--space-6)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-lg)',
-            animation: 'fade-up 300ms var(--ease-default) both',
+            background: '#111128',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 10,
+            padding: 16,
+            marginTop: 12,
+            animation: 'fade-up 250ms ease both',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-            <Info size={16} strokeWidth={1.5} color="var(--teal)" style={{ flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <h4
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 700,
-                  color: 'var(--teal)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: 'var(--space-2)',
-                }}
-              >
-                Analysis
-              </h4>
-              <p
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 'var(--text-sm)',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.7,
-                }}
-              >
-                {result.explanation}
-              </p>
-            </div>
-          </div>
+          <p
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              fontWeight: 600,
+              color: result.is_correct ? '#00D4AA' : '#FF4757',
+              margin: 0,
+            }}
+          >
+            {result.is_correct ? '✓ Correct' : '✗ Incorrect'}
+          </p>
 
-          {/* Shock stat callout */}
+          <p
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              fontWeight: 400,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.6,
+              marginTop: 8,
+              marginBottom: 0,
+            }}
+          >
+            {result.explanation}
+          </p>
+
           {result.shock_stat && (
             <div
               style={{
-                borderLeft: '2px solid var(--saffron)',
-                background: 'var(--saffron-dim)',
-                padding: 'var(--space-4)',
-                borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
+                marginTop: 12,
+                background: 'rgba(255,153,51,0.08)',
+                borderLeft: '2px solid #FF9933',
+                borderRadius: '0 6px 6px 0',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 6,
               }}
             >
+              <BarChart2 size={12} color="#FF9933" style={{ flexShrink: 0, marginTop: 2 }} />
               <p
                 style={{
                   fontFamily: 'var(--font-body)',
-                  fontSize: 'var(--text-xs)',
+                  fontSize: 12,
+                  fontWeight: 400,
                   fontStyle: 'italic',
-                  fontWeight: 500,
-                  color: 'var(--saffron)',
-                  lineHeight: 1.6,
+                  color: 'rgba(255,255,255,0.70)',
+                  lineHeight: 1.5,
+                  margin: 0,
                 }}
               >
-                &ldquo;{result.shock_stat}&rdquo;
+                {result.shock_stat}
               </p>
             </div>
           )}
-        </div>
-      )}
 
-      {/* ── Next button ─────────────────────────────────────────── */}
-      {result && (
-        <div style={{ marginTop: 'var(--space-12)' }}>
           <button
             onClick={onNext}
             className="btn-primary"
             style={{
               width: '100%',
               justifyContent: 'center',
-              padding: 'var(--space-4)',
-              fontSize: 'var(--text-md)',
-              borderRadius: 'var(--radius-lg)',
-              boxShadow: '0 4px 20px rgba(255,153,51,0.3)',
-              gap: 'var(--space-2)',
+              marginTop: 16,
+              padding: '12px 16px',
+              fontSize: 14,
+              borderRadius: 10,
             }}
           >
-            {currentIndex + 1 < total ? 'Next Question' : 'See Results'}
-            <ArrowRight size={18} strokeWidth={1.5} />
+            {currentIndex + 1 < total ? 'Next question →' : 'See my results →'}
           </button>
         </div>
       )}

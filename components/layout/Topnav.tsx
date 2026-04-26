@@ -7,7 +7,8 @@ import { Shield } from 'lucide-react';
 
 const NAV_LINKS = [
   { href: '/',             label: 'Map' },
-  { href: '/quiz',         label: 'Quiz' },
+  // Quiz — temporarily hidden, see quiz.md for build plan
+  // { href: '/quiz',         label: 'Quiz' },
   { href: '/health-check', label: 'Health Check' },
   { href: '/leaderboard',  label: 'Leaderboard' },
   { href: '/news',         label: 'News' },

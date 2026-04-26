@@ -1,40 +1,30 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Brain } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import QuizCard, { AnswerResult } from '@/components/quiz/QuizCard';
 import ResultCard from '@/components/quiz/ResultCard';
 import { QuizQuestionClient } from '@/types';
+import { buildSeenParam, markSeen, resetMemory } from '@/lib/quiz-memory';
 
-// ── localStorage helpers (inline — no lib dependency yet) ────────────────────
-const STORAGE_KEY = 'bimadarpan_seen_q';
-
-function getSeenIds(): number[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]'); }
-  catch { return []; }
-}
-
-function markSeen(ids: number[]) {
-  try {
-    const updated = [...new Set([...getSeenIds(), ...ids])].slice(-500);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch { /* localStorage full — fail silently */ }
-}
-
-function resetMemory() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-}
-
-// ── Grade / archetype tracking ───────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 type Phase = 'intro' | 'loading' | 'quiz' | 'result';
+
+interface ArchetypeScore {
+  total: number;
+  correct: number;
+}
 
 interface QuizSession {
   questions: QuizQuestionClient[];
   currentIdx: number;
   selectedOption: 'a' | 'b' | 'c' | 'd' | null;
   result: AnswerResult | null;
-  score: number;
-  wrongArchetypes: string[];
+  scores: {
+    correct: number;
+    byArchetype: Record<string, ArchetypeScore>;
+  };
+  wrongShockStats: string[];
   isSubmitting: boolean;
 }
 
@@ -43,8 +33,8 @@ const EMPTY_SESSION: QuizSession = {
   currentIdx: 0,
   selectedOption: null,
   result: null,
-  score: 0,
-  wrongArchetypes: [],
+  scores: { correct: 0, byArchetype: {} },
+  wrongShockStats: [],
   isSubmitting: false,
 };
 
@@ -58,11 +48,12 @@ export default function QuizPage() {
     setPhase('loading');
     setError(null);
     try {
-      const seen = getSeenIds();
-      const url = `/api/quiz/session${seen.length ? `?seen=${seen.join(',')}` : ''}`;
+      const seenParam = buildSeenParam();
+      const url = `/api/quiz/session${seenParam ? `?seen=${seenParam}` : ''}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to load questions');
       const { questions, reset } = await res.json();
+      if (!questions || questions.length === 0) throw new Error('No questions available');
       if (reset) resetMemory();
       markSeen(questions.map((q: QuizQuestionClient) => q.id));
       setSession({ ...EMPTY_SESSION, questions });
@@ -84,15 +75,30 @@ export default function QuizPage() {
         body: JSON.stringify({ question_id: question.id, selected_option: option }),
       });
       const result: AnswerResult = await res.json();
-      setSession(s => ({
-        ...s,
-        result,
-        isSubmitting: false,
-        score: result.is_correct ? s.score + 1 : s.score,
-        wrongArchetypes: !result.is_correct
-          ? [...s.wrongArchetypes, question.archetype]
-          : s.wrongArchetypes,
-      }));
+      const archetype = question.archetype;
+      setSession(s => {
+        const prev = s.scores.byArchetype[archetype] ?? { total: 0, correct: 0 };
+        const wrongShockStats =
+          !result.is_correct && result.shock_stat
+            ? [...s.wrongShockStats, result.shock_stat]
+            : s.wrongShockStats;
+        return {
+          ...s,
+          result,
+          isSubmitting: false,
+          wrongShockStats,
+          scores: {
+            correct: s.scores.correct + (result.is_correct ? 1 : 0),
+            byArchetype: {
+              ...s.scores.byArchetype,
+              [archetype]: {
+                total: prev.total + 1,
+                correct: prev.correct + (result.is_correct ? 1 : 0),
+              },
+            },
+          },
+        };
+      });
     } catch {
       setSession(s => ({ ...s, isSubmitting: false }));
     }
@@ -111,14 +117,15 @@ export default function QuizPage() {
     });
   }, []);
 
-  // ── Derive worst archetype from wrong answers ─────────────────────────────
+  // ── Derive worst archetype: lowest correct/total ratio ───────────────────
   const worstArchetype: string | null = (() => {
-    if (session.wrongArchetypes.length === 0) return null;
-    const counts = session.wrongArchetypes.reduce<Record<string, number>>(
-      (acc, a) => ({ ...acc, [a]: (acc[a] ?? 0) + 1 }),
-      {},
-    );
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const entries = Object.entries(session.scores.byArchetype);
+    if (entries.length === 0) return null;
+    const withRatio = entries
+      .filter(([, s]) => s.total > 0 && s.correct < s.total)
+      .map(([arch, s]) => ({ arch, ratio: s.correct / s.total }));
+    if (withRatio.length === 0) return null;
+    return withRatio.sort((a, b) => a.ratio - b.ratio)[0].arch;
   })();
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -127,12 +134,22 @@ export default function QuizPage() {
   if (phase === 'loading') return <LoadingScreen />;
   if (phase === 'result') {
     return (
-      <main className="page-enter" style={{ paddingTop: 100, minHeight: '100vh' }}>
-        <div style={{ maxWidth: 672, margin: '0 auto', padding: '0 var(--space-6)' }}>
+      <main
+        className="page-enter"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 24px 40px',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: 520 }}>
           <ResultCard
-            score={session.score}
+            score={session.scores.correct}
             total={session.questions.length}
             worstArchetype={worstArchetype}
+            wrongShockStats={session.wrongShockStats}
             onPlayAgain={startSession}
           />
         </div>
@@ -141,76 +158,144 @@ export default function QuizPage() {
   }
 
   const current = session.questions[session.currentIdx];
+  const progressPct = (session.currentIdx / session.questions.length) * 100;
+
   return (
-    <main className="page-enter" style={{ paddingTop: 100, minHeight: '100vh' }}>
-      <div style={{ maxWidth: 672, margin: '0 auto', padding: 'var(--space-12) var(--space-6) var(--space-20)' }}>
-        <QuizCard
-          question={current}
-          currentIndex={session.currentIdx}
-          total={session.questions.length}
-          selectedOption={session.selectedOption}
-          result={session.result}
-          isSubmitting={session.isSubmitting}
-          onSelectOption={handleSelectOption}
-          onNext={handleNext}
+    <>
+      {/* Full-width progress bar — sits right below fixed nav */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 64,
+          left: 0,
+          right: 0,
+          height: 4,
+          background: 'rgba(255,255,255,0.08)',
+          zIndex: 99,
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${progressPct}%`,
+            background: '#FF9933',
+            transition: 'width 300ms ease',
+          }}
         />
       </div>
-    </main>
+
+      <main className="page-enter" style={{ paddingTop: 88, minHeight: '100vh' }}>
+        <div style={{ maxWidth: 580, margin: '0 auto', padding: '24px 24px 80px' }}>
+          <button
+            onClick={() => { setPhase('intro'); setSession(EMPTY_SESSION); }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 0',
+              marginBottom: 24,
+              color: 'var(--text-tertiary)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              fontWeight: 400,
+              transition: 'color 150ms ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
+          >
+            <ArrowLeft size={14} strokeWidth={1.5} />
+            Back
+          </button>
+
+          <QuizCard
+            question={current}
+            currentIndex={session.currentIdx}
+            total={session.questions.length}
+            selectedOption={session.selectedOption}
+            result={session.result}
+            isSubmitting={session.isSubmitting}
+            onSelectOption={handleSelectOption}
+            onNext={handleNext}
+          />
+        </div>
+      </main>
+    </>
   );
 }
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
 function IntroScreen({ onStart, error }: { onStart: () => void; error: string | null }) {
   return (
-    <main className="page-enter" style={{ paddingTop: 100, minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
-      <div
-        style={{
-          maxWidth: 480,
-          margin: '0 auto',
-          padding: 'var(--space-12) var(--space-6)',
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 'var(--space-6)',
-        }}
-      >
-        <div
+    <main
+      className="aurora-bg page-enter"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0 var(--space-6)',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column' }}>
+        <span
           style={{
-            width: 64, height: 64,
-            borderRadius: 'var(--radius-xl)',
-            background: 'var(--saffron-dim)',
-            border: '1px solid var(--saffron-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-body)',
+            fontSize: 10,
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            color: 'var(--text-tertiary)',
+            marginBottom: 'var(--space-4)',
           }}
         >
-          <Brain size={28} strokeWidth={1.5} color="var(--saffron)" />
-        </div>
+          Insurance Reality Check
+        </span>
 
-        <div>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--text-2xl)',
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              lineHeight: 1.1,
-              letterSpacing: '-0.03em',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-            Do you really know insurance?
-          </h1>
-          <p style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-base)', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            10 questions. Real scenarios. Uncomfortable truths.
-          </p>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
-            ~4 minutes
-          </p>
-        </div>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 32,
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            lineHeight: 1.15,
+            margin: 0,
+          }}
+        >
+          Do you really know insurance?
+        </h1>
+
+        <p
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 15,
+            fontWeight: 400,
+            color: 'var(--text-secondary)',
+            marginTop: 8,
+            lineHeight: 1.6,
+          }}
+        >
+          10 questions. Real situations. Uncomfortable truths.
+        </p>
+
+        <p
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 13,
+            fontWeight: 400,
+            color: 'var(--text-tertiary)',
+            marginTop: 4,
+          }}
+        >
+          ~ 4 minutes
+        </p>
 
         {error && (
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--red-alert)' }}>{error}</p>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--red-alert)', marginTop: 'var(--space-4)' }}>
+            {error}
+          </p>
         )}
 
         <button
@@ -220,12 +305,12 @@ function IntroScreen({ onStart, error }: { onStart: () => void; error: string | 
             width: '100%',
             justifyContent: 'center',
             padding: 'var(--space-4)',
-            fontSize: 'var(--text-base)',
+            fontSize: 15,
             borderRadius: 'var(--radius-lg)',
-            boxShadow: '0 4px 24px rgba(255,153,51,0.25)',
+            marginTop: 32,
           }}
         >
-          Start the quiz
+          Start the quiz →
         </button>
       </div>
     </main>

@@ -1,160 +1,298 @@
 'use client';
 
-import { Share2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { X, MessageCircle, Link2 } from 'lucide-react';
 
 interface ResultCardProps {
   score: number;
   total: number;
   worstArchetype: string | null;
+  wrongShockStats: string[];
   onPlayAgain: () => void;
 }
 
 interface Grade {
   label: string;
   message: string;
-  color: string;
 }
 
-function getGrade(score: number, total: number): Grade {
-  const pct = score / total;
-  if (pct <= 0.3) return { label: 'Novice',  color: 'var(--red-alert)',  message: 'Most Indians score here. The industry counts on this.' };
-  if (pct <= 0.6) return { label: 'Aware',   color: 'var(--saffron)',    message: 'You know more than most. The fine print still has traps.' };
-  if (pct <= 0.8) return { label: 'Smart',   color: 'var(--teal)',       message: "You're harder to fool than most. Share this — your family needs it." };
-  return                  { label: 'Expert',  color: 'var(--teal)',       message: 'You understand insurance better than most agents selling it.' };
+function getGrade(score: number): Grade {
+  if (score <= 3) return { label: 'Novice', message: 'Most Indians score here. The industry counts on this.' };
+  if (score <= 6) return { label: 'Aware',  message: 'You know more than most. The fine print still has traps.' };
+  if (score <= 8) return { label: 'Smart',  message: 'You are harder to fool than most. Share this with your family.' };
+  return              { label: 'Expert', message: 'You understand insurance better than most agents selling it.' };
 }
 
 const ARCHETYPE_LABELS: Record<string, string> = {
-  'trap':         'employer/group cover traps',
-  'real-number':  'real-number shocks',
-  'agent-script': "agent script claims",
-  'fine-print':   'fine-print clauses',
-  'govt-scheme':  'government scheme entitlements',
-  'calculation':  'return-on-premium calculations',
+  'trap':         "situations that look safe but aren't",
+  'real-number':  'the real scale of the problem',
+  'agent-script': "what agents say vs what's true",
+  'fine-print':   'the clauses that kill claims',
+  'govt-scheme':  "free government schemes you're entitled to",
+  'calculation':  'the real math behind insurance products',
 };
 
-export default function ResultCard({ score, total, worstArchetype, onPlayAgain }: ResultCardProps) {
-  const grade = getGrade(score, total);
+export default function ResultCard({ score, total, worstArchetype, wrongShockStats, onPlayAgain }: ResultCardProps) {
+  const [showModal, setShowModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const archetypeMsg = worstArchetype
-    ? `You struggled most with ${ARCHETYPE_LABELS[worstArchetype] ?? worstArchetype} — worth a closer look.`
-    : null;
+  const grade     = getGrade(score);
+  const shockStat = wrongShockStats[0] ?? '';
+  const shareLink = typeof window !== 'undefined' ? `${window.location.origin}/quiz` : 'https://bimadarpan.in/quiz';
 
-  const shareUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/api/og?type=quiz&score=${score}&grade=${grade.label}`
-      : '';
+  const ogUrl = `/api/og?score=${score}&total=${total}&grade=${encodeURIComponent(grade.label)}${shockStat ? `&stat=${encodeURIComponent(shockStat)}` : ''}`;
 
-  function handleShare() {
-    if (navigator.share) {
-      navigator.share({ title: 'BimaDarpan Quiz', url: shareUrl }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
-    }
+  const waText  = `I scored ${score}/${total} on India's toughest insurance quiz. Do you know more than me?\n\nbimadarpan.in/quiz`;
+  const waUrl   = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+
+  function handleCopy() {
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 'var(--space-8)',
-        padding: 'var(--space-12) var(--space-6)',
-        animation: 'fade-up 400ms var(--ease-default) both',
-      }}
-    >
-      {/* Score */}
-      <div style={{ textAlign: 'center' }}>
-        <p
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-3xl)',
-            fontWeight: 700,
-            color: 'var(--saffron)',
-            lineHeight: 1,
-            marginBottom: 'var(--space-2)',
-          }}
-        >
-          {score} <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xl)' }}>/ {total}</span>
-        </p>
+    <>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 24,
+          animation: 'fade-up 300ms ease both',
+        }}
+      >
+        {/* ── Score ──────────────────────────────────────────────── */}
+        <div>
+          <p
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 48,
+              fontWeight: 700,
+              color: '#FF9933',
+              lineHeight: 1,
+              margin: 0,
+            }}
+          >
+            {score}{' '}
+            <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: 32 }}>/ {total}</span>
+          </p>
 
-        {/* Grade badge */}
-        <span
-          style={{
-            display: 'inline-block',
-            padding: '4px 16px',
-            background: `color-mix(in srgb, ${grade.color} 15%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${grade.color} 30%, transparent)`,
-            borderRadius: 'var(--radius-full)',
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 700,
-            color: grade.color,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            marginBottom: 'var(--space-4)',
-          }}
-        >
-          {grade.label}
-        </span>
-
-        <p
-          style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-base)',
-            color: 'var(--text-secondary)',
-            maxWidth: 400,
-            lineHeight: 1.6,
-          }}
-        >
-          {grade.message}
-        </p>
-      </div>
-
-      {/* Archetype insight */}
-      {archetypeMsg && (
-        <div
-          style={{
-            padding: 'var(--space-4) var(--space-5)',
-            background: 'var(--saffron-dim)',
-            border: '1px solid var(--saffron-border)',
-            borderRadius: 'var(--radius-lg)',
-            maxWidth: 420,
-            textAlign: 'center',
-          }}
-        >
           <p
             style={{
               fontFamily: 'var(--font-body)',
-              fontSize: 'var(--text-sm)',
-              color: 'var(--saffron)',
+              fontSize: 20,
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              margin: '12px 0 0',
+            }}
+          >
+            {grade.label}
+          </p>
+
+          <p
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              fontWeight: 400,
+              color: 'var(--text-secondary)',
+              margin: '6px 0 0',
               lineHeight: 1.6,
             }}
           >
-            {archetypeMsg}
+            {grade.message}
           </p>
         </div>
-      )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 'var(--space-4)', width: '100%', maxWidth: 380 }}>
-        <button
-          onClick={handleShare}
-          className="btn-primary"
-          style={{ flex: 1, justifyContent: 'center', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)' }}
-        >
-          <Share2 size={16} strokeWidth={1.5} />
-          Share result
-        </button>
-        <button
-          onClick={onPlayAgain}
-          className="btn-ghost"
-          style={{ flex: 1, justifyContent: 'center', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)' }}
-        >
-          <RefreshCw size={16} strokeWidth={1.5} />
-          Play again
-        </button>
+        {/* ── Weakest area ───────────────────────────────────────── */}
+        {worstArchetype && ARCHETYPE_LABELS[worstArchetype] && (
+          <div
+            style={{
+              background: '#111128',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 10,
+              padding: '14px 16px',
+            }}
+          >
+            <p
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 11,
+                fontWeight: 400,
+                color: 'var(--text-tertiary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.4px',
+                margin: '0 0 6px',
+              }}
+            >
+              You struggled most with:
+            </p>
+            <p
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 13,
+                fontWeight: 500,
+                color: 'var(--text-secondary)',
+                margin: 0,
+                lineHeight: 1.5,
+              }}
+            >
+              {ARCHETYPE_LABELS[worstArchetype]}
+            </p>
+          </div>
+        )}
+
+        {/* ── Buttons ────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            onClick={() => setShowModal(true)}
+            className="btn-primary"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              padding: '14px 16px',
+              fontSize: 14,
+              borderRadius: 10,
+            }}
+          >
+            Share your result
+          </button>
+          <button
+            onClick={onPlayAgain}
+            className="btn-ghost"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              padding: '14px 16px',
+              fontSize: 14,
+              borderRadius: 10,
+            }}
+          >
+            Try again
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* ── Share modal ────────────────────────────────────────────── */}
+      {showModal && (
+        <div
+          onClick={() => setShowModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 300,
+            background: 'rgba(0,0,0,0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 24px',
+            animation: 'fade-in 200ms ease both',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              background: '#111128',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 14,
+              padding: 24,
+              animation: 'fade-up 250ms ease both',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  margin: 0,
+                }}
+              >
+                Share your result
+              </p>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-tertiary)',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {/* OG preview */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={ogUrl}
+              alt="Result card preview"
+              style={{
+                width: '100%',
+                borderRadius: 8,
+                display: 'block',
+                marginBottom: 16,
+              }}
+            />
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary"
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 16px',
+                  fontSize: 14,
+                  borderRadius: 10,
+                  textDecoration: 'none',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <MessageCircle size={16} strokeWidth={1.5} />
+                Share on WhatsApp
+              </a>
+
+              <button
+                onClick={handleCopy}
+                className="btn-ghost"
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '12px 16px',
+                  fontSize: 14,
+                  borderRadius: 10,
+                  gap: 8,
+                }}
+              >
+                <Link2 size={16} strokeWidth={1.5} />
+                {copied ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
