@@ -8,6 +8,7 @@ import MapControls, { InsuranceType } from '@/components/map/MapControls';
 import SmallStatesInset from '@/components/map/SmallStatesInset';
 import StateTooltip from '@/components/map/StateTooltip';
 import { StateWithMetrics } from '@/types';
+import { SLUG_TO_STATE } from '@/lib/constants';
 
 // ── Legend config per layer ───────────────────────────────────────────────────
 
@@ -109,7 +110,16 @@ export default function HomePage() {
 
   const handleStateSelect = useCallback(
     (slug: string) => {
-      const found = statesData.find((s) => s.slug === slug) ?? null;
+      let found: StateWithMetrics | null = statesData.find((s) => s.slug === slug) ?? null;
+
+      // Fallback: state has no metrics row yet — open sidebar with NoData view
+      if (!found) {
+        const info = SLUG_TO_STATE[slug];
+        if (info) {
+          found = { id: 0, slug, name: info.name, region: info.region, metrics: null };
+        }
+      }
+
       setSelectedSlug(found ? slug : null);
       setSelectedState(found);
       if (found) setHasSelectedState(true);

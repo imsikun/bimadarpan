@@ -6,6 +6,7 @@ import {
   CheckCircle, XCircle, TrendingUp, Shield, Database,
 } from 'lucide-react';
 import { StateWithMetrics } from '@/types';
+import { getPenetrationInsight, getSettlementInsight, getPremiumInsight } from '@/lib/insights';
 
 interface SidebarProps {
   selectedState: StateWithMetrics | null;
@@ -54,12 +55,6 @@ function settlementSignal(v: number): string {
   return 'var(--data-poor)';
 }
 
-function insightLine(name: string, pct: number): string {
-  if (pct < 10)  return `${name} is one of India's most critically underinsured states — fewer than 1 in 10 people have any cover.`;
-  if (pct < 18)  return `${name} has significantly below-average insurance coverage compared to the national 3.7% GDP benchmark.`;
-  if (pct <= 25) return `${name} is approaching the national average but still has major coverage gaps.`;
-  return `${name} is among India's better-insured states — but urban concentration masks rural gaps.`;
-}
 
 function fmtCr(cr: number): string {
   if (cr >= 100000) return `₹${(cr / 100000).toFixed(1)}L Cr`;
@@ -141,9 +136,10 @@ interface MetricCardProps {
   color: string;
   progress?: number;
   sub?: string;
+  insight?: string;
 }
 
-function MetricCard({ icon, value, label, color, progress, sub }: MetricCardProps) {
+function MetricCard({ icon, value, label, color, progress, sub, insight }: MetricCardProps) {
   return (
     <div style={{
       background: '#111128',
@@ -159,6 +155,19 @@ function MetricCard({ icon, value, label, color, progress, sub }: MetricCardProp
         {value}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{label}</div>
+      {insight && (
+        <p style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 11,
+          fontWeight: 400,
+          fontStyle: 'italic',
+          color: 'rgba(255,255,255,0.40)',
+          lineHeight: 1.4,
+          margin: '6px 0 0',
+        }}>
+          {insight}
+        </p>
+      )}
       {sub && (
         <span className="badge badge--neutral" style={{ marginTop: 6, alignSelf: 'flex-start', fontSize: 9 }}>
           {sub}
@@ -380,7 +389,7 @@ function PanelContent({
                 color: 'rgba(255,255,255,0.45)',
                 margin: '10px 0 0',
               }}>
-                {insightLine(selectedState.name, m.penetration_pct)}
+                {getPenetrationInsight(m.penetration_pct)}
               </p>
             )}
 
@@ -435,6 +444,7 @@ function PanelContent({
                 label="Insurance penetration"
                 color={penColor}
                 progress={penProgress}
+                insight={getPenetrationInsight(m.penetration_pct)}
               />
               <MetricCard
                 icon={SettIcon}
@@ -442,12 +452,14 @@ function PanelContent({
                 label="Claim settlement ratio"
                 color={settColor}
                 progress={settProgress}
+                insight={getSettlementInsight(m.settlement_ratio_pct)}
               />
               <MetricCard
                 icon={<TrendingUp size={16} strokeWidth={1.5} />}
                 value={fmtCr(m.premium_cr)}
                 label="Total premium collected"
                 color="var(--saffron)"
+                insight={getPremiumInsight(m.premium_cr)}
               />
               <MetricCard
                 icon={<Shield size={16} strokeWidth={1.5} />}

@@ -11,7 +11,7 @@ const NAV_LINKS = [
   // { href: '/quiz',         label: 'Quiz' },
   { href: '/health-check', label: 'Health Check' },
   { href: '/leaderboard',  label: 'Leaderboard' },
-  { href: '/news',         label: 'News' },
+  // { href: '/news',         label: 'News' },
 ];
 
 function NavLink({ href, label, isActive }: { href: string; label: string; isActive: boolean }) {
